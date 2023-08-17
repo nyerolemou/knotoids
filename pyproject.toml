@@ -1,19 +1,17 @@
 [tool.poetry]
 name = "knotoids"
 version = "0.1.0"
-description = ""
+description = "Compute the knotoid distribution of piecewise-linear curves."
 authors = ["nyerolemou <nyerolemou@gmail.com>"]
 readme = "README.md"
 
 [tool.poetry.dependencies]
 python = "^3.11"
 typer = "^0.9.0"
-pathlib2 = "^2.3.7.post1"
-rich = "^13.5.2"
 
 
 [tool.poetry.scripts]
-knotoids = 'knotoids.__main__:main'
+knotoids = 'knotoids.main:main'
 
 
 [build-system]
