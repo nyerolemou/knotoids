@@ -1,9 +1,9 @@
 import argparse
 
 # def main():
-parser = argparse.ArgumentParser(description="Basic CLI using argparse.")
-parser.add_argument("--source", "-s", type=str, required=True, help="Source file or directory.")
-parser.add_argument("--target", "-t", type=str, required=True, help="Target file or directory.")
+parser = argparse.ArgumentParser(description="Computes the knotoid distribution of a 3D PL curve.")
+parser.add_argument("--source", "-s", type=str, required=True, help="Source file of PL curve coordinates.")
+parser.add_argument("--target", "-t", type=str, required=True, help="Target file.")
 args = parser.parse_args()
 
 print(f"Source: {args.source}")
