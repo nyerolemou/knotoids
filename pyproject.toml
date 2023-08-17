@@ -1,0 +1,18 @@
+[tool.poetry]
+name = "knotoids"
+version = "0.1.0"
+description = ""
+authors = ["nyerolemou <nyerolemou@gmail.com>"]
+readme = "README.md"
+
+[tool.poetry.dependencies]
+python = "^3.11"
+
+
+[tool.poetry.scripts]
+knotoids = 'knotoids.__main__:main'
+
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
