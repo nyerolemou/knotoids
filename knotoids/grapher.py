@@ -4,6 +4,7 @@ from collections import defaultdict
 from typing import Dict, List, NamedTuple, Tuple
 
 import numpy as np
+import plotting
 import scipy as sp
 import spherical_geometry as sg
 from spherical_geometry import great_circle_arc
@@ -57,7 +58,6 @@ class Grapher:
         and G2 is the graph antipodal to G1.
         """
         n = self.pl_curve.shape[0] - 1
-
         # Get first spherical graph (second one is just antipodal)
         first_endpoint_stack = self.pl_curve[0] - self.pl_curve[1:]
         last_endpoint_stack = -(self.pl_curve[-1] - self.pl_curve[1:-1])
@@ -82,10 +82,13 @@ class Grapher:
         edges = [(i, i + 1) for i in range(2 * n - 1)] + [
             (i, i + 1) for i in range(2 * n - 1, 4 * n - 3)
         ]
+        plotting.plot_from_nodes_and_edges(nodes, edges)
         # find intersection of pair of antipodal curves
         nodes, edges = self._resolve_intersections(nodes, edges)
+        plotting.plot_from_nodes_and_edges(nodes, edges)
         # remove all leaves
-        edges = Grapher._remove_leaves(edges)
+        nodes, edges = Grapher._remove_leaves(nodes, edges)
+        plotting.plot_from_nodes_and_edges(nodes, edges)
         return nodes, edges
 
     def _resolve_intersections(
@@ -128,6 +131,7 @@ class Grapher:
             new_nodes = intersection_tracker[edge]
             new_nodes.extend([edge[0], edge[1]])
             # sort the new nodes by distance from the first vertex of the edge
+            # TODO: add error handling for invalid arccos values
             new_node_distances_to_first_vertex = [
                 np.arccos(np.dot(nodes[edge[0]].position, nodes[new_node].position))
                 for new_node in new_nodes
@@ -147,7 +151,9 @@ class Grapher:
         return nodes, edges
 
     @staticmethod
-    def _remove_leaves(edges: List[Tuple[int, int]]) -> List[Tuple[int, int]]:
+    def _remove_leaves(
+        nodes: Dict[int, SphericalNode], edges: List[Tuple[int, int]]
+    ) -> Tuple[Dict[int, SphericalNode], List[Tuple[int, int]]]:
         """
         Removes all leaves from the graph.
         Algorithm:
@@ -160,8 +166,11 @@ class Grapher:
         while len(np.where(np.sum(adjacency_matrix, axis=0) == 1)[1]) > 0:
             leaf = np.where(np.sum(adjacency_matrix, axis=0) == 1)[1][0]
             adjacency_matrix = Grapher._trim_leaf_strand(adjacency_matrix, leaf)
-        new_edges = Grapher._adjacency_matrix_to_edge_list(adjacency_matrix)
-        return new_edges
+        isolated_vertices = np.where(adjacency_matrix.toarray().any(axis=1) == 0)
+        for v in list(isolated_vertices[0]):
+            if v in nodes:
+                del nodes[v]
+        return nodes, Grapher._adjacency_matrix_to_edge_list(adjacency_matrix)
 
     @staticmethod
     def _trim_leaf_strand(
@@ -214,7 +223,7 @@ class Grapher:
 
 
 if __name__ == "__main__":
-    # test case for development
+    # development only
     pl_curve = np.array(
         [
             [3.39348426095347, -0.00611687458471819, 0.000417557750258721],
@@ -242,3 +251,4 @@ if __name__ == "__main__":
     )
     grapher = Grapher(pl_curve)
     graph = grapher._compute_graph()
+    # plotting.plot_from_nodes_and_edges(*graph)
