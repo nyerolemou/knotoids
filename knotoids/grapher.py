@@ -1,24 +1,18 @@
 import copy
 import itertools
 from collections import defaultdict
-from typing import Dict, List, NamedTuple, Tuple
+from typing import Dict, Iterable, List, NamedTuple, Tuple
 
 import numpy as np
+import planar
 import plotting
 import scipy as sp
-import spherical_geometry as sg
-from spherical_geometry import great_circle_arc
+from knotoid_class import KnotoidClass
+from spherical_geometry import great_circle_arc, polygon
+from structures import Edge, Region, SphericalNode, SphericalNodeDict
 
 
-class SphericalNode(NamedTuple):
-    index: int
-    position: np.array
-
-
-# note: a spherical/planar edge is just a pair of nodes (i,j) specified by vertex index
-
-
-# TODO: rename to KnotoidDistribution?
+# TODO: class is redundant?
 class Grapher:
     """
     Computes the boundaries of the regions on the sphere, each of which corresponds to a different knotoid classification.
@@ -26,22 +20,28 @@ class Grapher:
     Calls Knoto-ID to classify each region.
     """
 
-    def __init__(self, pl_curve: np.array):
+    def __init__(self, pl_curve: np.ndarray):
         self.pl_curve = pl_curve
 
-    def compute_regions(self) -> None:
+    def compute_regions(self) -> Iterable[Region]:
         """
         Returns a list of regions, each of which corresponds to a different knotoid classification.
-
-        Each region is ???TBD???
         """
         nodes, edges = self._compute_graph()
-        # planar_graph = PlanarGraph(nodes, edges)
-        # planar_regions = planar_graph.get_regions()
-        # spherical_regions = self._map_planar_regions_to_sphere(planar_regions)
-        # return self._classify_regions(spherical_regions)
+        planar_graph = planar.PlanarGraph(nodes, edges)
+        for face in planar_graph.generate_faces():
+            boundary_nodes = [
+                SphericalNode(node.index, node.position) for node in face.boundary_nodes
+            ]
+            internal_point = Grapher._inverse_projection(face.internal_point)
+            area = polygon.SphericalPolygon(boundary_nodes, internal_point).area() / (
+                4 * np.pi
+            )
+            # TODO: performance cost calling Knoto-ID for each region, especially if using subprocess
+            classification = self._classify_region(internal_point)
+            yield Region(internal_point, boundary_nodes, classification, area)
 
-    def _compute_graph(self) -> Tuple[Dict[int, SphericalNode], List[Tuple[int, int]]]:
+    def _compute_graph(self) -> Tuple[SphericalNodeDict, List[Edge]]:
         """
         Computes graph on the surface of the sphere, whose regions correspond to a (potentially different) knotoid classification.
 
@@ -74,10 +74,7 @@ class Grapher:
             # add vertices from first curve
             nodes[i] = SphericalNode(index=i, position=g[i])
             # add vertices from antipodal curve
-            # TODO: is the copy necessary?
-            nodes[i + 2 * n - 1] = SphericalNode(
-                index=i + 2 * n - 1, position=-g[i].copy()
-            )
+            nodes[i + 2 * n - 1] = SphericalNode(index=i + 2 * n - 1, position=-g[i])
         # edges are consecutive pairs of vertices, excluding any edges that join antipodal graphs
         edges = [(i, i + 1) for i in range(2 * n - 1)] + [
             (i, i + 1) for i in range(2 * n - 1, 4 * n - 3)
@@ -92,8 +89,8 @@ class Grapher:
         return nodes, edges
 
     def _resolve_intersections(
-        self, nodes: Dict[int, SphericalNode], edges: List[Tuple[int, int]]
-    ) -> Tuple[Dict[int, SphericalNode], List[Tuple[int, int]]]:
+        self, nodes: SphericalNodeDict, edges: List[Edge]
+    ) -> Tuple[SphericalNodeDict, List[Edge]]:
         """
         Finds the intersection of two graphs, adding new vertices and edges where required.
 
@@ -150,10 +147,30 @@ class Grapher:
             edges.remove(edge)
         return nodes, edges
 
+    def _classify_region(self, point: np.ndarray) -> KnotoidClass:
+        """
+        Finds the knotoid classification of each region using Knoto-ID.
+        """
+        # TODO: call Knoto-ID. Add command line option to specify path to Knoto-ID?
+        s = "this will be knoto-id output"
+        try:
+            return KnotoidClass(s)
+        except ValueError:
+            return KnotoidClass.UNCLASSIFIED
+
+    @staticmethod
+    def _inverse_projection(point: np.ndarray) -> np.ndarray:
+        """
+        Inverse stereographic projection.
+        """
+        return np.array(
+            [2 * point[0], 2 * point[1], -1 + np.linalg.norm(point) ** 2]
+        ) / (1 + np.linalg.norm(point) ** 2)
+
     @staticmethod
     def _remove_leaves(
-        nodes: Dict[int, SphericalNode], edges: List[Tuple[int, int]]
-    ) -> Tuple[Dict[int, SphericalNode], List[Tuple[int, int]]]:
+        nodes: SphericalNodeDict, edges: List[Edge]
+    ) -> Tuple[SphericalNodeDict, List[Edge]]:
         """
         Removes all leaves from the graph.
         Algorithm:
@@ -189,9 +206,7 @@ class Grapher:
         return Grapher._trim_leaf_strand(adjacency_matrix, neighbour)
 
     @staticmethod
-    def _edge_list_to_adjacency_matrix(
-        edges: List[Tuple[int, int]]
-    ) -> sp.sparse.dok_matrix:
+    def _edge_list_to_adjacency_matrix(edges: List[Edge]) -> sp.sparse.dok_matrix:
         """
         Returns the adjacency matrix of the graph.
         """
@@ -205,21 +220,17 @@ class Grapher:
     @staticmethod
     def _adjacency_matrix_to_edge_list(
         adjacency_matrix: sp.sparse.dok_matrix,
-    ) -> List[Tuple[int, int]]:
+    ) -> List[Edge]:
         """
         Convert adjacency matrix to list of edges.
         """
-        indices = sp.sparse.triu(adjacency_matrix).nonzero()
-        new_edges = []
-        for i in range(indices[0].shape[0]):
-            new_edges.append((indices[0][i], indices[1][i]))
-        return new_edges
-
-    # def _classify_regions(self) -> None:
-    #     """
-    #     Finds the knotoid classification of each region using Knoto-ID.
-    #     """
-    #     pass
+        # convert sparse matrix to list of edges
+        return [
+            (i, j)
+            for i, j in zip(
+                adjacency_matrix.nonzero()[0], adjacency_matrix.nonzero()[1]
+            )
+        ]
 
 
 if __name__ == "__main__":
