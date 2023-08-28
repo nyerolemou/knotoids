@@ -1,24 +1,18 @@
 import copy
 import itertools
 from collections import defaultdict
-from typing import Dict, List, NamedTuple, Tuple
+from typing import Iterable, List, Tuple
 
 import numpy as np
+import planar
 import plotting
 import scipy as sp
-import spherical_geometry as sg
-from spherical_geometry import great_circle_arc
+from knotoid_class import KnotoidClass
+from spherical_geometry import great_circle_arc, polygon
+from structures import Edge, Region, SphericalNode, SphericalNodeDict
 
 
-class SphericalNode(NamedTuple):
-    index: int
-    position: np.array
-
-
-# note: a spherical/planar edge is just a pair of nodes (i,j) specified by vertex index
-
-
-# TODO: rename to KnotoidDistribution?
+# TODO: class is redundant? Keep graph functionality here and move region creation to separate class/mod?
 class Grapher:
     """
     Computes the boundaries of the regions on the sphere, each of which corresponds to a different knotoid classification.
@@ -26,26 +20,41 @@ class Grapher:
     Calls Knoto-ID to classify each region.
     """
 
-    def __init__(self, pl_curve: np.array):
+    def __init__(self, pl_curve: np.ndarray):
         self.pl_curve = pl_curve
 
-    def compute_regions(self) -> None:
+    def compute_regions(self) -> Iterable[Region]:
         """
-        Returns a list of regions, each of which corresponds to a different knotoid classification.
-
-        Each region is ???TBD???
+        Returns regions, each of which corresponds to a different knotoid classification.
         """
         nodes, edges = self._compute_graph()
-        # planar_graph = PlanarGraph(nodes, edges)
-        # planar_regions = planar_graph.get_regions()
-        # spherical_regions = self._map_planar_regions_to_sphere(planar_regions)
-        # return self._classify_regions(spherical_regions)
+        planar_graph = planar.PlanarGraph(nodes, edges)
+        for face in planar_graph.generate_faces():
+            boundary_nodes = [
+                SphericalNode(node.index, Grapher._inverse_projection(node.position))
+                for node in face.boundary_nodes
+            ]
+            if not face.is_external:
+                internal_point = Grapher._inverse_projection(face.internal_point)
+            else:
+                # north pole is the representative point of the external face
+                internal_point = np.array([0, 0, 1])
+            # TODO: area not correct for external region bounded by two curves.
+            # TODO: have to add first node to end of boundary_nodes and only input positions
+            # area = polygon.SphericalPolygon(boundary_nodes, internal_point).area() / (
+            #     4 * np.pi
+            # )
+            area = 1.0
+            # TODO: performance cost calling Knoto-ID for each region, especially if using subprocess
+            classification = self._classify_region(internal_point)
+            yield Region(internal_point, boundary_nodes, classification, area)
 
-    def _compute_graph(self) -> Tuple[Dict[int, SphericalNode], List[Tuple[int, int]]]:
+    def _compute_graph(self) -> Tuple[SphericalNodeDict, List[Edge]]:
         """
-        Computes graph on the surface of the sphere, whose regions correspond to a (potentially different) knotoid classification.
+        Computes graph on the surface of the sphere, whose regions correspond to a (potentially different)
+        knotoid classification.
 
-        Stages of algorithm:
+        Algorithm:
         1. Find two connected graphs on the sphere formed from normalised vectors between points and each fixed endpoint.
         2. Find the intersection of these two graphs, adding new vertices and edges where required.
         3. Remove all leaves from the graph.
@@ -53,7 +62,7 @@ class Grapher:
         Suppose self.pl_curve has n+1 vertices {v0, v1, ..., vn}.
 
         Then the two connected graphs, G1 and G2, each have:
-        - 2n-1 vertices
+        - 2n-1 nodes
         - 2n-2 edges,
         and G2 is the graph antipodal to G1.
         """
@@ -68,32 +77,42 @@ class Grapher:
             last_endpoint_stack / np.linalg.norm(last_endpoint_stack, axis=1)[:, None]
         )
         g = np.vstack((first_endpoint_stack, last_endpoint_stack))
+        # remove rows that are the same
+        _, unique_idx = np.unique(np.round(g, 8), axis=0, return_index=True)
+        unique_idx_sorted = np.sort(unique_idx)
+        g = g[unique_idx_sorted]
         # create vertex dictionary
         nodes = {}
-        for i in range(2 * n - 1):
-            # add vertices from first curve
+
+        # Edges and nodes per graph
+        # graph1 for first endpoint and negative of last endpoint
+        # graph2 for last endpoint and negative of first endpoint
+        NUM_NODES = g.shape[0]  # 2 * n - 1 if no duplicates removed
+        NUM_EDGES = NUM_NODES - 1
+
+        # add vertices for graph1
+        for i in range(NUM_NODES):
             nodes[i] = SphericalNode(index=i, position=g[i])
-            # add vertices from antipodal curve
-            # TODO: is the copy necessary?
-            nodes[i + 2 * n - 1] = SphericalNode(
-                index=i + 2 * n - 1, position=-g[i].copy()
+        # add vertices from antipodal curve
+        IDX_OFFSET = NUM_NODES
+        for i in range(NUM_NODES):
+            antipodal_pos = -g[i]
+            nodes[IDX_OFFSET + i] = SphericalNode(
+                index=IDX_OFFSET + i, position=antipodal_pos
             )
         # edges are consecutive pairs of vertices, excluding any edges that join antipodal graphs
-        edges = [(i, i + 1) for i in range(2 * n - 1)] + [
-            (i, i + 1) for i in range(2 * n - 1, 4 * n - 3)
+        edges = [(i, i + 1) for i in range(NUM_EDGES)] + [
+            (i, i + 1) for i in range(IDX_OFFSET, IDX_OFFSET + NUM_EDGES)
         ]
-        plotting.plot_from_nodes_and_edges(nodes, edges)
         # find intersection of pair of antipodal curves
         nodes, edges = self._resolve_intersections(nodes, edges)
-        plotting.plot_from_nodes_and_edges(nodes, edges)
         # remove all leaves
         nodes, edges = Grapher._remove_leaves(nodes, edges)
-        plotting.plot_from_nodes_and_edges(nodes, edges)
         return nodes, edges
 
     def _resolve_intersections(
-        self, nodes: Dict[int, SphericalNode], edges: List[Tuple[int, int]]
-    ) -> Tuple[Dict[int, SphericalNode], List[Tuple[int, int]]]:
+        self, nodes: SphericalNodeDict, edges: List[Edge]
+    ) -> Tuple[SphericalNodeDict, List[Edge]]:
         """
         Finds the intersection of two graphs, adding new vertices and edges where required.
 
@@ -113,6 +132,7 @@ class Grapher:
         edges = copy.copy(edges)
         intersection_tracker = defaultdict(list)
         for first_edge, second_edge in itertools.combinations(edges, 2):
+            # TODO: why invalid value encountered in intersection?
             intersection = great_circle_arc.intersection(
                 nodes[first_edge[0]].position,
                 nodes[first_edge[1]].position,
@@ -131,9 +151,15 @@ class Grapher:
             new_nodes = intersection_tracker[edge]
             new_nodes.extend([edge[0], edge[1]])
             # sort the new nodes by distance from the first vertex of the edge
-            # TODO: add error handling for invalid arccos values
+            # TODO: intersections at the end of a strand?
             new_node_distances_to_first_vertex = [
-                np.arccos(np.dot(nodes[edge[0]].position, nodes[new_node].position))
+                np.arccos(
+                    np.clip(
+                        np.dot(nodes[edge[0]].position, nodes[new_node].position),
+                        a_min=-1.0,
+                        a_max=1.0,
+                    )
+                )
                 for new_node in new_nodes
             ]
             new_nodes = [
@@ -142,18 +168,37 @@ class Grapher:
                     zip(new_node_distances_to_first_vertex, new_nodes)
                 )
             ]
-            # add new edges
+            # add new edges and remove old edge
             edges.extend(
                 [(new_nodes[i], new_nodes[i + 1]) for i in range(len(new_nodes) - 1)]
             )
-            # remove old edge
             edges.remove(edge)
         return nodes, edges
 
+    def _classify_region(self, point: np.ndarray) -> KnotoidClass:
+        """
+        Finds the knotoid classification of each region using Knoto-ID.
+        """
+        # TODO: call Knoto-ID. Add command line option to specify path to Knoto-ID?
+        s = "this will be knoto-id output"
+        try:
+            return KnotoidClass(s)
+        except ValueError:
+            return KnotoidClass.UNCLASSIFIED
+
+    @staticmethod
+    def _inverse_projection(point: np.ndarray) -> np.ndarray:
+        """
+        Inverse stereographic projection.
+        """
+        return np.array(
+            [2 * point[0], 2 * point[1], -1 + np.linalg.norm(point) ** 2]
+        ) / (1 + np.linalg.norm(point) ** 2)
+
     @staticmethod
     def _remove_leaves(
-        nodes: Dict[int, SphericalNode], edges: List[Tuple[int, int]]
-    ) -> Tuple[Dict[int, SphericalNode], List[Tuple[int, int]]]:
+        nodes: SphericalNodeDict, edges: List[Edge]
+    ) -> Tuple[SphericalNodeDict, List[Edge]]:
         """
         Removes all leaves from the graph.
         Algorithm:
@@ -189,9 +234,7 @@ class Grapher:
         return Grapher._trim_leaf_strand(adjacency_matrix, neighbour)
 
     @staticmethod
-    def _edge_list_to_adjacency_matrix(
-        edges: List[Tuple[int, int]]
-    ) -> sp.sparse.dok_matrix:
+    def _edge_list_to_adjacency_matrix(edges: List[Edge]) -> sp.sparse.dok_matrix:
         """
         Returns the adjacency matrix of the graph.
         """
@@ -205,7 +248,7 @@ class Grapher:
     @staticmethod
     def _adjacency_matrix_to_edge_list(
         adjacency_matrix: sp.sparse.dok_matrix,
-    ) -> List[Tuple[int, int]]:
+    ) -> List[Edge]:
         """
         Convert adjacency matrix to list of edges.
         """
@@ -215,11 +258,18 @@ class Grapher:
             new_edges.append((indices[0][i], indices[1][i]))
         return new_edges
 
-    # def _classify_regions(self) -> None:
-    #     """
-    #     Finds the knotoid classification of each region using Knoto-ID.
-    #     """
-    #     pass
+
+def subdivide_curve(curve: np.ndarray, factor: int) -> np.ndarray:
+    """
+    Subdivide piecewise linear curve.
+    """
+    new_curve = []
+    for point, next_point in zip(curve[:-1], curve[1:]):
+        new_curve.append(point)
+        for i in range(1, factor):
+            new_curve.append(point + i * (next_point - point) / factor)
+    new_curve.append(curve[-1])
+    return np.array(new_curve)
 
 
 if __name__ == "__main__":
@@ -249,6 +299,7 @@ if __name__ == "__main__":
             [0.467083058443442, -1.55224514368384, -1.00414878657081],
         ]
     )
+    pl_curve = subdivide_curve(pl_curve, 5)
     grapher = Grapher(pl_curve)
-    graph = grapher._compute_graph()
-    # plotting.plot_from_nodes_and_edges(*graph)
+    regions = list(grapher.compute_regions())
+    plotting.plot_spherical_regions(regions, pl_curve)
