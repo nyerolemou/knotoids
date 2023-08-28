@@ -1,9 +1,10 @@
 import collections
 import functools
 import math
-from typing import Dict, Iterable, List
+from typing import Dict, Iterable, List, Set, Tuple
 
 import numpy as np
+import plotting
 import shapely
 from structures import Edge, Face, PlanarNode, SphericalNodeDict
 
@@ -25,7 +26,30 @@ class PlanarGraph:
 
     def generate_faces(self) -> Iterable[Face]:
         """
-        Find the faces of the planar graph.
+        Generates the faces of the planar graph.
+
+        # TODO: this assumes graph is connected for now
+        """
+        face_boundaries = self._find_boundaries()
+        for boundary in face_boundaries:
+            if self._exterior_edge in {
+                (
+                    boundary[i].index,
+                    boundary[(i + 1) % len(boundary)].index,
+                )
+                for i in range(len(boundary))
+            }:
+                yield Face(boundary_nodes=boundary, is_external=True)
+            else:
+                internal_point = PlanarGraph._get_internal_point(boundary)
+                yield Face(
+                    boundary_nodes=boundary,
+                    internal_point=internal_point,
+                )
+
+    def _find_boundaries(self) -> List[List[PlanarNode]]:
+        """
+        Find the face boundaries of the planar graph.
 
         Algorithm:
 
@@ -44,8 +68,7 @@ class PlanarGraph:
         """
         mirror_edges = [(e[1], e[0]) for e in self.edges]
         edges_and_mirrors = set(self.edges + mirror_edges)
-        # if graph is disconnected, the external face of the plane is the union of exactly two exernal faces
-        external_boundaries = []
+        face_boundaries = []
         # stopping criterion for face-finding algorithm is that all edges have been visited
         # exactly once in each direction
         while len(edges_and_mirrors) > 0:
@@ -60,31 +83,8 @@ class PlanarGraph:
                 face_nodes.append(self.nodes[next_node])
                 v, w = w, next_node
             face_nodes.pop()
-            if PlanarGraph._is_external_face(face_nodes):
-                external_boundaries.append(face_nodes)
-            else:
-                point_in_region = self._get_internal_point(face_nodes)
-                yield Face(point_in_region, face_nodes)
-        if len(external_boundaries) == 1:
-            point_in_region = self._get_internal_point(
-                external_boundaries[0], is_external=True
-            )
-            yield Face(point_in_region, external_boundaries[0])
-        else:
-            # when graph is disconnected: the external face of the plane is the
-            # union of the external faces of each connected component
-            first_boundary, second_boundary = (
-                external_boundaries[0],
-                external_boundaries[1],
-            )
-            point_in_region = self._get_internal_point(
-                first_boundary, second_boundary, is_external=True
-            )
-            yield Face(
-                point_in_region,
-                first_boundary,
-                second_boundary_nodes=second_boundary,
-            )
+            face_boundaries.append(face_nodes)
+        return face_boundaries
 
     # TODO: refactor to do in constant time.
     def _next_clockwise_neighbour(
@@ -98,38 +98,17 @@ class PlanarGraph:
         neighbours = self.clockwise_adjacency_dict[root_node]
         return neighbours[(neighbours.index(current_neighbour) + 1) % len(neighbours)]
 
-    def _get_internal_point(
-        self,
-        face_nodes: List[PlanarNode],
-        other_boundary_nodes: List[PlanarNode] = None,
-        is_external: bool = False,
-    ) -> np.ndarray:
+    @staticmethod
+    def _get_internal_point(face_nodes: List[PlanarNode]) -> np.ndarray:
         """
         Returns a point in the interior of the face.
         """
-        if not is_external:
-            coordinates = [node.position for node in face_nodes] + [
-                face_nodes[0].position
-            ]
-            polygon = shapely.geometry.Polygon(coordinates)
-            initial_guess = np.array(polygon.representative_point().coords[0])
-            # TODO: is this guaranteed to be in the spherical region in the concave case?
-            return initial_guess
-        else:
-            # 1. Find the point p in the external boundar(ies) furthest from the origin
-            # 2. Move away from this extremal point in direction p
-            if not other_boundary_nodes:
-                all_coordinates = np.asarray([node.position for node in face_nodes])
-            else:
-                all_coordinates = np.asarray(
-                    [node.position for node in face_nodes + other_boundary_nodes]
-                )
-            # find point in all_coordinates furthest from origin
-            distances = np.linalg.norm(all_coordinates, axis=1)
-            extremal_point = all_coordinates[np.argmax(distances)]
-            # move away from extremal point in direction of extremal point
-            # TODO: is this far enough?
-            return extremal_point + extremal_point / np.linalg.norm(extremal_point)
+        coordinates = [node.position for node in face_nodes] + [face_nodes[0].position]
+        polygon = shapely.geometry.Polygon(coordinates)
+        initial_guess = np.array(polygon.representative_point().coords[0])
+        # TODO: is this guaranteed to be in the spherical region in the concave case?
+        # Need to use embedded great circles or some triangulation of the sphere?
+        return initial_guess
 
     # TODO: merge with _clockwise_order?
     def _clockwise_angle(self, planar_position: np.ndarray) -> float:
@@ -169,26 +148,30 @@ class PlanarGraph:
             adjacency_dict[node] = self._clockwise_order(node, adjacency_dict[node])
         return adjacency_dict
 
-    @staticmethod
-    def _is_external_face(vertices: List[PlanarNode]) -> bool:
-        # TODO: fix this as it doesn't seem to be working properly...
-        n = len(vertices)
-        for i in range(n):
-            if PlanarGraph._is_counterclockwise(
-                vertices[i], vertices[(i + 1) % n], vertices[(i + 2) % n]
-            ):
-                return False
-        return True
+    @functools.cached_property
+    def _exterior_edge(self) -> Edge:
+        """
+        Returns an edge in the exterior face.
 
-    @staticmethod
-    def _is_counterclockwise(a: PlanarNode, b: PlanarNode, c: PlanarNode) -> bool:
+        # TODO: Assumes the graph is connected, and edges are embedded as straight lines.
+
+        Algorithm:
+        1. Find the node v with the smallest x-coordinate.
+        2. Find v's steepest positive neighbour w.
+
+        The oriented edge (v,w) is guaranteed to be in the exterior face.
         """
-        Returns True if the oriented edge (a,b) is counterclockwise with respect to c.
-        """
-        x = (c.position[1] - a.position[1]) * (b.position[0] - a.position[0]) > (
-            b.position[1] - a.position[1]
-        ) * (c.position[0] - a.position[0])
-        return x
+        v = min(self.nodes.values(), key=lambda node: node.position[0])
+        neighbour_positions = np.asarray(
+            [self.nodes[n].position for n in self.clockwise_adjacency_dict[v.index]]
+        )
+        gradients = (neighbour_positions[:, 1] - v.position[1]) / (
+            neighbour_positions[:, 0] - v.position[0]
+        )
+        steepest_neighbour = self.clockwise_adjacency_dict[v.index][
+            np.argmax(gradients)
+        ]
+        return (v.index, steepest_neighbour)
 
     @staticmethod
     def _project(spherical_position: np.ndarray) -> np.ndarray:
@@ -225,7 +208,6 @@ if __name__ == "__main__":
         ),
     }
     connected_edges = [(0, 1), (1, 2), (2, 3), (3, 4), (4, 0), (4, 5), (0, 5)]
-    # disconnected_edges = [(1, 2), (2, 3), (1, 3), (4, 0), (4, 5), (0, 5)]
     connected_graph = PlanarGraph(
         spherical_nodes=spherical_nodes, edges=connected_edges
     )
@@ -235,3 +217,4 @@ if __name__ == "__main__":
     for face in connected_graph.generate_faces():
         print([node.index for node in face.boundary_nodes])
         print(face.internal_point)
+        print(face.is_external)

@@ -21,13 +21,14 @@ class Region(NamedTuple):
     """
     A region of the sphere bounded by a simple closed curve.
 
-    The order of the nodes is important. It determines the orientation of the region.
+    The order of the nodes is important; it determines the orientation of the region.
     """
 
     internal_point: np.ndarray
     boundary_nodes: List[SphericalNode]
     knotoid_class: KnotoidClass
     area: float
+    second_boundary_nodes: Optional[List[SphericalNode]] = None
 
 
 class Face(NamedTuple):
@@ -37,6 +38,7 @@ class Face(NamedTuple):
     The order of the nodes is important. It determines the orientation of the region.
     """
 
-    internal_point: np.ndarray
     boundary_nodes: List[PlanarNode]
-    second_boundary_nodes: Optional[List[PlanarNode]] = None
+    internal_point: Optional[np.ndarray] = None
+    # second_boundary_nodes: Optional[List[PlanarNode]] = None
+    is_external: bool = False
