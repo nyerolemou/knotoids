@@ -1,10 +1,9 @@
 import collections
 import functools
 import math
-from typing import Dict, Iterable, List, Set, Tuple
+from typing import Dict, Iterable, List
 
 import numpy as np
-import plotting
 import shapely
 from structures import Edge, Face, PlanarNode, SphericalNodeDict
 
@@ -189,8 +188,7 @@ class PlanarGraph:
 
 
 if __name__ == "__main__":
-    # development code
-    import plotting
+    # TODO: move to tests
     import structures
 
     spherical_nodes = {
@@ -210,9 +208,6 @@ if __name__ == "__main__":
     connected_edges = [(0, 1), (1, 2), (2, 3), (3, 4), (4, 0), (4, 5), (0, 5)]
     connected_graph = PlanarGraph(
         spherical_nodes=spherical_nodes, edges=connected_edges
-    )
-    plotting.plot_planar_from_nodes_and_edges(
-        connected_graph.nodes, connected_graph.edges
     )
     for face in connected_graph.generate_faces():
         print([node.index for node in face.boundary_nodes])
