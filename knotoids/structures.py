@@ -29,6 +29,7 @@ class Region(NamedTuple):
     knotoid_class: KnotoidClass
     area: float
     second_boundary_nodes: Optional[List[SphericalNode]] = None
+    is_external: bool = False
 
 
 class Face(NamedTuple):

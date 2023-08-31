@@ -1,18 +1,22 @@
 import copy
 import itertools
+import logging
+import subprocess
 from collections import defaultdict
+from pathlib import Path
 from typing import Iterable, List, Tuple
 
 import numpy as np
 import planar
-import plotting
 import scipy as sp
 from knotoid_class import KnotoidClass
 from spherical_geometry import great_circle_arc, polygon
 from structures import Edge, Region, SphericalNode, SphericalNodeDict
 
+logging.basicConfig(level=logging.INFO)
 
-# TODO: class is redundant? Keep graph functionality here and move region creation to separate class/mod?
+
+# TODO: class needs a refactor; graph creation, region creation and documention should be separated
 class Grapher:
     """
     Computes the boundaries of the regions on the sphere, each of which corresponds to a different knotoid classification.
@@ -20,8 +24,17 @@ class Grapher:
     Calls Knoto-ID to classify each region.
     """
 
-    def __init__(self, pl_curve: np.ndarray):
-        self.pl_curve = pl_curve
+    def __init__(self, source: Path, path_to_ki: Path):
+        self.source = source
+        self.path_to_ki = path_to_ki
+        # TODO: move this during refactor. Shouldn't be in this class.
+        file_extension = self.source.suffix
+        if file_extension == ".txt":
+            self.pl_curve = np.loadtxt(self.source)
+        elif file_extension == ".npy":
+            self.pl_curve = np.load(self.source)
+        else:
+            raise ValueError(f"Unsupported file extension: {file_extension}")
 
     def compute_regions(self) -> Iterable[Region]:
         """
@@ -34,20 +47,28 @@ class Grapher:
                 SphericalNode(node.index, Grapher._inverse_projection(node.position))
                 for node in face.boundary_nodes
             ]
-            if not face.is_external:
+            if face.internal_point is not None:
                 internal_point = Grapher._inverse_projection(face.internal_point)
+                is_external = False
             else:
                 # north pole is the representative point of the external face
                 internal_point = np.array([0, 0, 1])
+                is_external = True
             # TODO: area not correct for external region bounded by two curves.
-            # TODO: have to add first node to end of boundary_nodes and only input positions
-            # area = polygon.SphericalPolygon(boundary_nodes, internal_point).area() / (
-            #     4 * np.pi
-            # )
-            area = 1.0
-            # TODO: performance cost calling Knoto-ID for each region, especially if using subprocess
+            area = polygon.SphericalPolygon(
+                [node.position for node in boundary_nodes]
+                + [boundary_nodes[0].position],
+                internal_point,
+            ).area() / (4 * np.pi)
+            # TODO: performance cost calling Knoto-ID for each region; refactor to classify all points at once
             classification = self._classify_region(internal_point)
-            yield Region(internal_point, boundary_nodes, classification, area)
+            yield Region(
+                internal_point=internal_point,
+                boundary_nodes=boundary_nodes,
+                knotoid_class=classification,
+                area=area,
+                is_external=is_external,
+            )
 
     def _compute_graph(self) -> Tuple[SphericalNodeDict, List[Edge]]:
         """
@@ -179,8 +200,23 @@ class Grapher:
         """
         Finds the knotoid classification of each region using Knoto-ID.
         """
-        # TODO: call Knoto-ID. Add command line option to specify path to Knoto-ID?
-        s = "this will be knoto-id output"
+        exe_path = Path.joinpath(self.path_to_ki, "bin/polynomial_invariant")
+        command = f'{exe_path} --projection="{point[0]}, {point[1]}, {point[2]}" --names-db=internal {self.source}'
+        # Execute the command using subprocess and capture output
+        try:
+            completed_process = subprocess.run(
+                command, shell=True, check=True, capture_output=True, text=True
+            )
+        except subprocess.CalledProcessError as e:
+            logging.error(f"Error calling Knoto-ID: {e}.")
+            raise e
+        stdout = completed_process.stdout
+        s = ""
+        # Parse the stdout to find the knotoid type
+        for line in stdout.split("\n"):
+            if "Knotoid type:" in line:
+                s = line.split(":")[1].split()[0]
+                break
         try:
             return KnotoidClass(s)
         except ValueError:
@@ -191,9 +227,12 @@ class Grapher:
         """
         Inverse stereographic projection.
         """
-        return np.array(
+        # TODO: getting acos error w/ Knoto-ID; thought it was due to floating point
+        # error but not sure after normalising here
+        projected_point = np.array(
             [2 * point[0], 2 * point[1], -1 + np.linalg.norm(point) ** 2]
         ) / (1 + np.linalg.norm(point) ** 2)
+        return projected_point / np.linalg.norm(projected_point)
 
     @staticmethod
     def _remove_leaves(
@@ -272,34 +311,28 @@ def subdivide_curve(curve: np.ndarray, factor: int) -> np.ndarray:
     return np.array(new_curve)
 
 
+def summarise_distribution(regions: List[Region]) -> None:
+    """
+    Summarise the knotoid distribution of the curve.
+    """
+    distribution = defaultdict(float)
+    for region in regions:
+        distribution[region.knotoid_class] += region.area
+    sorted_distribution = sorted(distribution.items(), key=lambda x: x[1], reverse=True)
+    s = ""
+    for knotoid_class, proportion in sorted_distribution:
+        s += f"{knotoid_class.value}: {round(proportion, 4)}\n"
+    s += f"Total: {round(sum(distribution.values()), 4)}"
+    logging.info(f"Knotoid distribution:\n{s}")
+
+
 if __name__ == "__main__":
     # development only
-    pl_curve = np.array(
-        [
-            [3.39348426095347, -0.00611687458471819, 0.000417557750258721],
-            [2.96604530691374, 0.951870338215143, 0.821666924650344],
-            [1.83930657084388, 1.54777726947254, 1.25626134099222],
-            [0.469135475523462, 1.54406959645954, 1.00592086474954],
-            [-0.60142421425641, 1.04286446588196, 0.00497601351961938],
-            [-1.5713824251345, 0.368238123058527, -1.00057504682367],
-            [-2.26294813388938, -0.815496650449799, -1.25471722615356],
-            [-2.3128076565279, -2.09044902532547, -0.82125065999155],
-            [-1.6976583796246, -2.94075078800773, 0.000564375447807511],
-            [-0.653580716731356, -3.04835372484424, 0.822162818423712],
-            [0.425913795097334, -2.36807978977476, 1.2551661637214],
-            [1.10590405603033, -1.1779626362436, 1.00077245962767],
-            [1.10466082113733, 1.17711784671551, -1.00526125896886],
-            [0.422660695970157, 2.36559494992422, -1.25563265937198],
-            [-0.657100033636752, 3.04313857097233, -0.821135701066607],
-            [-1.70068973965882, 2.93365580297979, -8.24987795427573e-05],
-            [-2.31550496188464, 2.08292085981145, 0.820674799650177],
-            [-2.26564166770125, 0.808510887218917, 1.25408407933773],
-            [-1.57392084030126, -0.374752151141274, 1.00146652820878],
-            [-0.603055310031078, -1.04932092056333, -0.00231688946508329],
-            [0.467083058443442, -1.55224514368384, -1.00414878657081],
-        ]
-    )
-    pl_curve = subdivide_curve(pl_curve, 5)
-    grapher = Grapher(pl_curve)
+    source_path = Path("tests/data/pl_curve.txt")
+    path_to_ki = Path("/Users/nayayerolemou/Desktop/Knoto-ID")
+    pl_curve = subdivide_curve(np.loadtxt(source_path), 5)
+    grapher = Grapher(source_path, path_to_ki=path_to_ki)
     regions = list(grapher.compute_regions())
-    plotting.plot_spherical_regions(regions, pl_curve)
+    summarise_distribution(regions)
+    # plotting.plot_planar_regions(regions)
+    # plotting.plot_spherical_regions(regions, pl_curve)
