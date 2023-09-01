@@ -51,8 +51,8 @@ def _classify_region(point: np.ndarray, config: Config) -> KnotoidClass:
     """
     Finds the knotoid classification of each region using Knoto-ID.
     """
-    exe_path = Path.joinpath(config.path_to_knoto_id, "bin/polynomial_invariant")
-    command = f'{exe_path} --projection="{point[0]}, {point[1]}, {point[2]}" --names-db=internal {config.path_to_curve}'
+    exe_path = Path.joinpath(config.knoto_id_root, "bin/polynomial_invariant")
+    command = f'{exe_path} --projection="{point[0]}, {point[1]}, {point[2]}" --names-db=internal {config.source}'
     # Execute the command using subprocess and capture output
     try:
         completed_process = subprocess.run(

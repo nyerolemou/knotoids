@@ -13,14 +13,13 @@ spherical-geometry = "^1.2.23"
 scipy = "^1.11.2"
 shapely = "^2.0.1"
 plotly-express = "^0.4.1"
+plotly = "^5.16.1"
 
 
 [tool.poetry.scripts]
-knotoids = 'knotoids.main:main'
+knotoids = 'knotoids.main:cli'
 
 
-[tool.poetry.group.dev.dependencies]
-plotly = "^5.16.1"
 
 [build-system]
 requires = ["poetry-core"]
