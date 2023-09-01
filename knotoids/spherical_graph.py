@@ -8,10 +8,11 @@ from typing import List, Tuple
 import numpy as np
 import scipy as sp
 from spherical_geometry import great_circle_arc
-from structures import Edge, SphericalNode, SphericalNodeDict
+
+from .graph import Edge, SphericalNode, SphericalNodeDict
 
 
-class Grapher:
+class SphericalGraph:
     """
     Computes the leafless graph on the surface of the sphere, whose regions correspond to a
     (potentially different) knotoid classification.
@@ -75,7 +76,7 @@ class Grapher:
         # find intersection of pair of antipodal curves
         nodes, edges = self._resolve_intersections(nodes, edges)
         # remove all leaves
-        nodes, edges = Grapher._remove_leaves(nodes, edges)
+        nodes, edges = SphericalGraph._remove_leaves(nodes, edges)
         return nodes, edges
 
     def _resolve_intersections(
@@ -154,15 +155,15 @@ class Grapher:
             deleted. Note this is because removing a leaf may create a new leaf.
             3. Continue until there are no leaves.
         """
-        adjacency_matrix = Grapher._edge_list_to_adjacency_matrix(edges)
+        adjacency_matrix = SphericalGraph._edge_list_to_adjacency_matrix(edges)
         while len(np.where(np.sum(adjacency_matrix, axis=0) == 1)[1]) > 0:
             leaf = np.where(np.sum(adjacency_matrix, axis=0) == 1)[1][0]
-            adjacency_matrix = Grapher._trim_leaf_strand(adjacency_matrix, leaf)
+            adjacency_matrix = SphericalGraph._trim_leaf_strand(adjacency_matrix, leaf)
         isolated_vertices = np.where(adjacency_matrix.toarray().any(axis=1) == 0)
         for v in list(isolated_vertices[0]):
             if v in nodes:
                 del nodes[v]
-        return nodes, Grapher._adjacency_matrix_to_edge_list(adjacency_matrix)
+        return nodes, SphericalGraph._adjacency_matrix_to_edge_list(adjacency_matrix)
 
     @staticmethod
     def _trim_leaf_strand(
@@ -178,7 +179,7 @@ class Grapher:
             return adjacency_matrix
         adjacency_matrix[leaf, neighbour] = 0
         adjacency_matrix[neighbour, leaf] = 0
-        return Grapher._trim_leaf_strand(adjacency_matrix, neighbour)
+        return SphericalGraph._trim_leaf_strand(adjacency_matrix, neighbour)
 
     @staticmethod
     def _edge_list_to_adjacency_matrix(edges: List[Edge]) -> sp.sparse.dok_matrix:
@@ -204,14 +205,3 @@ class Grapher:
         for i in range(indices[0].shape[0]):
             new_edges.append((indices[0][i], indices[1][i]))
         return new_edges
-
-
-if __name__ == "__main__":
-    # development only
-    source_path = Path("tests/data/pl_curve.txt")
-    path_to_ki = Path("")
-    pl_curve = np.loadtxt(source_path)
-    grapher = Grapher(source_path, path_to_ki=path_to_ki)
-    regions = list(grapher.compute_regions())
-    # plotting.plot_planar_regions(regions)
-    # plotting.plot_spherical_regions(regions, pl_curve)

@@ -4,7 +4,8 @@ import numpy as np
 import plotly.express as px
 import plotly.graph_objects as go
 from spherical_geometry import great_circle_arc
-from structures import Edge, PlanarNodeDict, Region, SphericalNodeDict
+
+from .graph import Edge, PlanarNodeDict, Region, SphericalNodeDict
 
 
 def plot_spherical_regions(

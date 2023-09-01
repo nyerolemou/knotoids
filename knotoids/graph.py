@@ -1,19 +1,8 @@
-from pathlib import Path
 from typing import Dict, List, NamedTuple, Optional, Tuple
 
 import numpy as np
 
-from knotoids.knotoid_class import KnotoidClass
-
-
-class Config(NamedTuple):
-    """
-    Configuration for each run.
-    """
-
-    source: Path
-    output: Path
-    path_to_knoto_id: Path
+from .knotoid_class import KnotoidClass
 
 
 class Node(NamedTuple):

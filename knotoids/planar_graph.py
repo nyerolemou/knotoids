@@ -5,7 +5,8 @@ from typing import Dict, Iterable, List
 
 import numpy as np
 import shapely
-from structures import Edge, Face, PlanarNode, SphericalNodeDict
+
+from .graph import Edge, Face, PlanarNode, SphericalNodeDict
 
 
 class PlanarGraph:
@@ -187,29 +188,26 @@ class PlanarGraph:
         )
 
 
-if __name__ == "__main__":
-    # TODO: move to tests
-    import structures
-
-    spherical_nodes = {
-        0: structures.SphericalNode(index=0, position=np.array([0, -1, 0])),
-        1: structures.SphericalNode(index=1, position=np.array([-1, 0, 0])),
-        2: structures.SphericalNode(index=2, position=np.array([0, 1, 0])),
-        3: structures.SphericalNode(
-            index=3, position=np.array([0.2, 0.3, np.sqrt(1 - 0.2**2 - 0.3**2)])
-        ),
-        4: structures.SphericalNode(
-            index=4, position=np.array([0.2, 0.4, np.sqrt(1 - 0.2**2 - 0.4**2)])
-        ),
-        5: structures.SphericalNode(
-            index=5, position=np.array([0.3, -0.2, np.sqrt(1 - 0.3**2 - 0.2**2)])
-        ),
-    }
-    connected_edges = [(0, 1), (1, 2), (2, 3), (3, 4), (4, 0), (4, 5), (0, 5)]
-    connected_graph = PlanarGraph(
-        spherical_nodes=spherical_nodes, edges=connected_edges
-    )
-    for face in connected_graph.generate_faces():
-        print([node.index for node in face.boundary_nodes])
-        print(face.internal_point)
-        print(face.is_external)
+# TODO: move to tests
+# spherical_nodes = {
+#     0: SphericalNode(index=0, position=np.array([0, -1, 0])),
+#     1: SphericalNode(index=1, position=np.array([-1, 0, 0])),
+#     2: SphericalNode(index=2, position=np.array([0, 1, 0])),
+#     3: SphericalNode(
+#         index=3, position=np.array([0.2, 0.3, np.sqrt(1 - 0.2**2 - 0.3**2)])
+#     ),
+#     4: SphericalNode(
+#         index=4, position=np.array([0.2, 0.4, np.sqrt(1 - 0.2**2 - 0.4**2)])
+#     ),
+#     5: SphericalNode(
+#         index=5, position=np.array([0.3, -0.2, np.sqrt(1 - 0.3**2 - 0.2**2)])
+#     ),
+# }
+# connected_edges = [(0, 1), (1, 2), (2, 3), (3, 4), (4, 0), (4, 5), (0, 5)]
+# connected_graph = PlanarGraph(
+#     spherical_nodes=spherical_nodes, edges=connected_edges
+# )
+# for face in connected_graph.generate_faces():
+#     print([node.index for node in face.boundary_nodes])
+#     print(face.internal_point)
+#     print(face.is_external)

@@ -3,10 +3,11 @@ from collections import defaultdict
 from typing import List
 
 import numpy as np
-import planar
-import region
-from grapher import Grapher
-from structures import Config, Region
+
+from . import planar_graph, region
+from .config import Config
+from .graph import Region
+from .spherical_graph import SphericalGraph
 
 
 def compute_distribution(config: Config) -> None:
@@ -16,10 +17,10 @@ def compute_distribution(config: Config) -> None:
     else:
         pl_curve = np.load(config.source)
 
-    graph = Grapher(pl_curve).compute_graph()
-    planar_graph = planar.PlanarGraph(*graph)
+    graph = SphericalGraph(pl_curve).compute_graph()
+    embedded_graph = planar_graph.PlanarGraph(*graph)
     regions = region.generate_regions_from_faces(
-        planar_graph.generate_faces(), config=config
+        embedded_graph.generate_faces(), config=config
     )
     # TODO: finish implementing. distribution summary, plots, etc.
 

@@ -1,3 +1,5 @@
+"""Generates spherical regions and computes their knotoid classification."""
+
 import logging
 import subprocess
 from pathlib import Path
@@ -5,15 +7,10 @@ from typing import Iterable
 
 import numpy as np
 from spherical_geometry import polygon
-from structures import Config, Face, Region, SphericalNode
 
-from knotoids.knotoid_class import KnotoidClass
-
-"""
-Generates Regions from Faces.
-
-Calls Knoto-ID to classify each region.
-"""
+from .config import Config
+from .graph import Face, Region, SphericalNode
+from .knotoid_class import KnotoidClass
 
 
 def generate_regions_from_faces(
