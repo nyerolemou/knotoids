@@ -1,8 +1,6 @@
 import copy
 import itertools
-import logging
 from collections import defaultdict
-from pathlib import Path
 from typing import List, Tuple
 
 import numpy as np
@@ -76,7 +74,7 @@ class SphericalGraph:
         # find intersection of pair of antipodal curves
         nodes, edges = self._resolve_intersections(nodes, edges)
         # remove all leaves
-        nodes, edges = SphericalGraph._remove_leaves(nodes, edges)
+        nodes, edges = self._remove_leaves(nodes, edges)
         return nodes, edges
 
     def _resolve_intersections(
@@ -143,9 +141,9 @@ class SphericalGraph:
             edges.remove(edge)
         return nodes, edges
 
-    @staticmethod
+    @classmethod
     def _remove_leaves(
-        nodes: SphericalNodeDict, edges: List[Edge]
+        cls, nodes: SphericalNodeDict, edges: List[Edge]
     ) -> Tuple[SphericalNodeDict, List[Edge]]:
         """
         Removes all leaves from the graph.
@@ -155,19 +153,19 @@ class SphericalGraph:
             deleted. Note this is because removing a leaf may create a new leaf.
             3. Continue until there are no leaves.
         """
-        adjacency_matrix = SphericalGraph._edge_list_to_adjacency_matrix(edges)
+        adjacency_matrix = _edge_list_to_adjacency_matrix(edges)
         while len(np.where(np.sum(adjacency_matrix, axis=0) == 1)[1]) > 0:
             leaf = np.where(np.sum(adjacency_matrix, axis=0) == 1)[1][0]
-            adjacency_matrix = SphericalGraph._trim_leaf_strand(adjacency_matrix, leaf)
+            adjacency_matrix = cls._trim_leaf_strand(adjacency_matrix, leaf)
         isolated_vertices = np.where(adjacency_matrix.toarray().any(axis=1) == 0)
         for v in list(isolated_vertices[0]):
             if v in nodes:
                 del nodes[v]
-        return nodes, SphericalGraph._adjacency_matrix_to_edge_list(adjacency_matrix)
+        return nodes, _adjacency_matrix_to_edge_list(adjacency_matrix)
 
-    @staticmethod
+    @classmethod
     def _trim_leaf_strand(
-        adjacency_matrix: sp.sparse.dok_matrix, leaf: int
+        cls, adjacency_matrix: sp.sparse.dok_matrix, leaf: int
     ) -> sp.sparse.dok_matrix:
         """
         Delete all edges along an entire leaf strand.
@@ -179,29 +177,29 @@ class SphericalGraph:
             return adjacency_matrix
         adjacency_matrix[leaf, neighbour] = 0
         adjacency_matrix[neighbour, leaf] = 0
-        return SphericalGraph._trim_leaf_strand(adjacency_matrix, neighbour)
+        return cls._trim_leaf_strand(adjacency_matrix, neighbour)
 
-    @staticmethod
-    def _edge_list_to_adjacency_matrix(edges: List[Edge]) -> sp.sparse.dok_matrix:
-        """
-        Returns the adjacency matrix of the graph.
-        """
-        n = np.max(np.array(edges)) + 1
-        x = sp.sparse.dok_matrix((n, n), dtype=int)
-        for edge in edges:
-            x[edge[0], edge[1]] = 1
-        x += x.T
-        return x
 
-    @staticmethod
-    def _adjacency_matrix_to_edge_list(
-        adjacency_matrix: sp.sparse.dok_matrix,
-    ) -> List[Edge]:
-        """
-        Convert adjacency matrix to list of edges.
-        """
-        indices = sp.sparse.triu(adjacency_matrix).nonzero()
-        new_edges = []
-        for i in range(indices[0].shape[0]):
-            new_edges.append((indices[0][i], indices[1][i]))
-        return new_edges
+def _edge_list_to_adjacency_matrix(edges: List[Edge]) -> sp.sparse.dok_matrix:
+    """
+    Returns the adjacency matrix of the graph.
+    """
+    n = np.max(np.array(edges)) + 1
+    x = sp.sparse.dok_matrix((n, n), dtype=int)
+    for edge in edges:
+        x[edge[0], edge[1]] = 1
+    x += x.T
+    return x
+
+
+def _adjacency_matrix_to_edge_list(
+    adjacency_matrix: sp.sparse.dok_matrix,
+) -> List[Edge]:
+    """
+    Convert adjacency matrix to list of edges.
+    """
+    indices = sp.sparse.triu(adjacency_matrix).nonzero()
+    new_edges = []
+    for i in range(indices[0].shape[0]):
+        new_edges.append((indices[0][i], indices[1][i]))
+    return new_edges

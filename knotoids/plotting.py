@@ -1,4 +1,5 @@
-from typing import List, Optional
+from pathlib import Path
+from typing import Iterable, List, Optional
 
 import numpy as np
 import plotly.express as px
@@ -9,7 +10,7 @@ from .graph import Edge, PlanarNodeDict, Region, SphericalNodeDict
 
 
 def plot_spherical_regions(
-    regions: List[Region], curve: Optional[np.ndarray] = None
+    regions: Iterable[Region], output: Path = None, curve: Optional[np.ndarray] = None
 ) -> None:
     fig = go.Figure()
     colours = px.colors.qualitative.Light24
@@ -113,6 +114,10 @@ def plot_spherical_regions(
         )
     )
     fig.show()
+
+    if not output:
+        return
+    fig.write_html(str(output / "knotoid_distribution.html"))
 
 
 def plot_planar_regions(regions: List[Region]) -> None:
@@ -263,12 +268,12 @@ def plot_spherical_from_nodes_and_edges(
             mode="markers",
             marker=dict(
                 size=4,
-                color=hover_texts,  # Coloring by index
-                colorscale="Viridis",  # Change to your preferred colorscale if needed
+                color=hover_texts,
+                colorscale="Viridis",
                 colorbar=dict(title="Node Index"),
                 showscale=True,
             ),
-            text=hover_texts,  # Assign hover text to each node
+            text=hover_texts,
             hoverinfo="text",
             line=dict(color="black", width=2),
         )

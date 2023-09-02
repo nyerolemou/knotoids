@@ -21,7 +21,7 @@ class Region(NamedTuple):
     """
     A region of the sphere bounded by a simple closed curve.
 
-    The order of the nodes is important; it determines the orientation of the region.
+    The order of the nodes is important; it determines the edges of the boundary.
 
     The nodes do not form a closed curve; v_0 != v_n, and the edge v_n->v_0 exists.
     """

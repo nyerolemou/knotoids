@@ -45,7 +45,17 @@ def main(
     ],
     output: Annotated[
         Optional[Path],
-        typer.Option("--output", "-o", help="Path to output file."),
+        typer.Option(
+            "--output",
+            "-o",
+            help="Path to output directory.",
+            exists=True,
+            file_okay=False,
+            dir_okay=True,
+            writable=False,
+            readable=True,
+            resolve_path=True,
+        ),
     ] = None,
     verbose: Annotated[
         bool,
@@ -64,15 +74,15 @@ def main(
     logging.basicConfig(
         level=logging.INFO,
     )
-    if not Path.joinpath(knoto_id_root, "bin/polynomial_invariant").exists():
+    if not (knoto_id_root / "bin/polynomial_invariant").exists():
         logging.error(
-            f"Problem with installation of Knoto-ID. {Path.joinpath(knoto_id_root, 'bin/polynomial_invariant')} not found."
+            f"Problem with installation of Knoto-ID. {knoto_id_root / 'bin/polynomial_invariant'} not found."
         )
         raise RuntimeError(knoto_id_root)
     config = Config(
         source=source, knoto_id_root=knoto_id_root, output=output, verbose=verbose
     )
-    distribution.compute_distribution(config=config)
+    distribution.compute_distribution(config)
 
 
 if __name__ == "__main__":

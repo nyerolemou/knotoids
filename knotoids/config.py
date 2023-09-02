@@ -1,6 +1,8 @@
 from pathlib import Path
 from typing import NamedTuple, Optional
 
+import numpy as np
+
 
 class Config(NamedTuple):
     """
@@ -16,3 +18,9 @@ class Config(NamedTuple):
     knoto_id_root: Path
     verbose: bool
     output: Optional[Path] = None
+
+    def load_pl_curve(self) -> np.ndarray:
+        try:
+            return np.load(self.source)
+        except ValueError:
+            return np.loadtxt(self.source)

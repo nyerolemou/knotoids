@@ -6,28 +6,24 @@ from typing import List, Optional
 
 import numpy as np
 
-from . import planar_graph, region
+from . import plotting, region
 from .config import Config
 from .graph import Region
+from .planar_graph import PlanarGraph
 from .spherical_graph import SphericalGraph
 
 
 def compute_distribution(config: Config) -> None:
-    file_extension = config.source.suffix
-    if file_extension in [".txt", ".xyz"]:
-        pl_curve = np.loadtxt(config.source)
-    elif file_extension == ".npy":
-        pl_curve = np.load(config.source)
-    else:
-        raise ValueError(f"Unsupported file extension {file_extension}")
-
+    pl_curve = config.load_pl_curve()
     graph = SphericalGraph(pl_curve).compute_graph()
-    embedded_graph = planar_graph.PlanarGraph(*graph)
-    regions = region.generate_regions_from_faces(
-        embedded_graph.generate_faces(), config=config
+    embedded_graph = PlanarGraph.from_spherical_graph(*graph)
+    regions = list(
+        region.generate_regions_from_faces(
+            embedded_graph.generate_faces(), config=config
+        )
     )
-    _summarise_distribution(list(regions), verbose=config.verbose, output=config.output)
-    # TODO: add plot generation
+    _summarise_distribution(regions, verbose=config.verbose, output=config.output)
+    plotting.plot_spherical_regions(regions, output=config.output, curve=pl_curve)
 
 
 def _summarise_distribution(
@@ -36,7 +32,6 @@ def _summarise_distribution(
     """
     Summarise the knotoid distribution of the curve.
     """
-    json_output = {"distribution": None, "regions": None}
     distribution_summary = defaultdict(float)
     region_summary = {}
     for idx, region in enumerate(regions):
@@ -46,19 +41,23 @@ def _summarise_distribution(
     sorted_distribution = sorted(
         distribution_summary.items(), key=lambda x: x[1], reverse=True
     )
-    s = ""
-    for knotoid_class, proportion in sorted_distribution:
-        s += f"{knotoid_class}: {round(proportion, 4)}\n"
-    logging.info(f"\n\n***Knotoid distribution***\n{s}")
+    knotoid_dist_str = "\n".join(
+        f"{knotoid_class}: {round(proportion, 4)}"
+        for knotoid_class, proportion in sorted_distribution
+    )
+    logging.info(f"\n\n***Knotoid distribution***\n{knotoid_dist_str}\n")
 
-    if output is not None:
-        json_output["distribution"] = sorted_distribution
-        # TODO: serialization for regions. Currently, verbose output doesn't work.
-        json_output["regions"] = region_summary
-        output_file = output.with_suffix(".json")
-        logging.info(f"Saving output to {output_file}")
-        with open(output_file, "w") as f:
-            json.dump(json_output, f)
+    if output is None:
+        return
+
+    json_output = {}
+    json_output["distribution"] = sorted_distribution
+    # TODO: serialization for knotoidclass - verbose output doesn't work atm.
+    json_output["regions"] = region_summary
+    output_file = output / "summary.json"
+    logging.info(f"Saving output to {output_file}")
+    with open(output_file, "w") as f:
+        json.dump(json_output, f)
 
 
 def _subdivide_curve(curve: np.ndarray, factor: int) -> np.ndarray:
