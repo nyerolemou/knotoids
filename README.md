@@ -8,6 +8,8 @@ Knotoids are a mathematical abstraction extending traditional knot theory to inc
 
 This project, Knotoids, takes a deterministic approach. It precisely computes the knotoid distribution for a given piecewise linear curve in 3D space by partitioning the sphere of possible 2D projections into regions that share a knotoid class. This removes the need for approximations, providing an exact classification. It also dramatically reduces the number knotoid classifications to the number of regions on the sphere, rather than the number of MC samples, thus improving performance.
 
+For more background on knotoids, see [KnotProt](https://knotprot.cent.uw.edu.pl/help_knotoids).
+
 ## Requirements
 
 - Python 3.x
@@ -20,7 +22,7 @@ This project, Knotoids, takes a deterministic approach. It precisely computes th
 
 1. If you haven't installed Poetry yet, follow the installation steps provided on [Poetry's official website](https://python-poetry.org/docs/#installation).
 
-2. Clone the Knotoids repository to your local system:
+2. Clone the Knotoids repository:
 
 ```bash
 git clone https://github.com/nyerolemou/knotoids.git
@@ -46,6 +48,8 @@ Here's a quick example to demonstrate the basic usage:
 ```bash
 knotoids -s path/to/curve.xyz -o send/output/here -k path/to/knoto-id
 ```
+
+See `examples/` for an example input curve and the generated outputs.
 
 ### Command Line Options
 
