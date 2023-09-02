@@ -1,30 +1,40 @@
 import collections
 import functools
 import math
-from typing import Dict, Iterable, List, Set, Tuple
+from typing import Dict, Generator, List
 
 import numpy as np
-import plotting
 import shapely
-from structures import Edge, Face, PlanarNode, SphericalNodeDict
+
+from .graph import Edge, Face, PlanarNode, PlanarNodeDict, SphericalNodeDict
 
 
 class PlanarGraph:
     def __init__(
         self,
-        spherical_nodes: SphericalNodeDict,
+        nodes: PlanarNodeDict,
         edges: List[Edge],
     ):
-        self.nodes = {
+        self.nodes = nodes
+        self.edges = edges
+        self.clockwise_adjacency_dict = self._clockwise_adjacency_dict
+
+    @classmethod
+    def from_spherical_graph(
+        cls, spherical_nodes: SphericalNodeDict, edges: List[Edge]
+    ):
+        """
+        Constructs a planar graph from a spherical graph.
+        """
+        planar_nodes = {
             key: PlanarNode(
-                index=node.index, position=PlanarGraph._project(node.position)
+                index=node.index, position=stereographic_project(node.position)
             )
             for key, node in spherical_nodes.items()
         }
-        self.edges = edges
-        self.clockwise_adjacency_dict = self._get_clockwise_adjacency_dict
+        return cls(planar_nodes, edges)
 
-    def generate_faces(self) -> Iterable[Face]:
+    def generate_faces(self) -> Generator[Face, None, None]:
         """
         Generates the faces of the planar graph.
 
@@ -41,13 +51,13 @@ class PlanarGraph:
             }:
                 yield Face(boundary_nodes=boundary, is_external=True)
             else:
-                internal_point = PlanarGraph._get_internal_point(boundary)
+                internal_point = self._get_internal_point(boundary)
                 yield Face(
                     boundary_nodes=boundary,
                     internal_point=internal_point,
                 )
 
-    def _find_boundaries(self) -> List[List[PlanarNode]]:
+    def _find_boundaries(self) -> Generator[List[PlanarNode], None, None]:
         """
         Find the face boundaries of the planar graph.
 
@@ -68,7 +78,6 @@ class PlanarGraph:
         """
         mirror_edges = [(e[1], e[0]) for e in self.edges]
         edges_and_mirrors = set(self.edges + mirror_edges)
-        face_boundaries = []
         # stopping criterion for face-finding algorithm is that all edges have been visited
         # exactly once in each direction
         while len(edges_and_mirrors) > 0:
@@ -83,10 +92,8 @@ class PlanarGraph:
                 face_nodes.append(self.nodes[next_node])
                 v, w = w, next_node
             face_nodes.pop()
-            face_boundaries.append(face_nodes)
-        return face_boundaries
+            yield face_nodes
 
-    # TODO: refactor to do in constant time.
     def _next_clockwise_neighbour(
         self,
         root_node: int,
@@ -110,7 +117,6 @@ class PlanarGraph:
         # Need to use embedded great circles or some triangulation of the sphere?
         return initial_guess
 
-    # TODO: merge with _clockwise_order?
     def _clockwise_angle(self, planar_position: np.ndarray) -> float:
         """
         Returns the positive clockwise angle between w and positive x-axis.
@@ -133,7 +139,7 @@ class PlanarGraph:
         return sorted_neighbours
 
     @functools.cached_property
-    def _get_clockwise_adjacency_dict(self) -> Dict[int, List[int]]:
+    def _clockwise_adjacency_dict(self) -> Dict[int, List[int]]:
         """
         Returns a dictionary of node indices and their neighbours in clockwise order.
         """
@@ -173,48 +179,21 @@ class PlanarGraph:
         ]
         return (v.index, steepest_neighbour)
 
-    @staticmethod
-    def _project(spherical_position: np.ndarray) -> np.ndarray:
-        """
-        Projects the spherical nodes onto the plane.
 
-        Use stereographic projection to map the nodes from the sphere to the plane.
-        """
-        return np.array(
-            [
-                spherical_position[0] / (1 - spherical_position[2]),
-                spherical_position[1] / (1 - spherical_position[2]),
-            ]
-        )
+def stereographic_project(spherical_position: np.ndarray) -> np.ndarray:
+    """
+    Projects the spherical nodes onto the plane.
 
+    Use stereographic projection to map the nodes from the sphere to the plane.
 
-if __name__ == "__main__":
-    # development code
-    import plotting
-    import structures
-
-    spherical_nodes = {
-        0: structures.SphericalNode(index=0, position=np.array([0, -1, 0])),
-        1: structures.SphericalNode(index=1, position=np.array([-1, 0, 0])),
-        2: structures.SphericalNode(index=2, position=np.array([0, 1, 0])),
-        3: structures.SphericalNode(
-            index=3, position=np.array([0.2, 0.3, np.sqrt(1 - 0.2**2 - 0.3**2)])
-        ),
-        4: structures.SphericalNode(
-            index=4, position=np.array([0.2, 0.4, np.sqrt(1 - 0.2**2 - 0.4**2)])
-        ),
-        5: structures.SphericalNode(
-            index=5, position=np.array([0.3, -0.2, np.sqrt(1 - 0.3**2 - 0.2**2)])
-        ),
-    }
-    connected_edges = [(0, 1), (1, 2), (2, 3), (3, 4), (4, 0), (4, 5), (0, 5)]
-    connected_graph = PlanarGraph(
-        spherical_nodes=spherical_nodes, edges=connected_edges
+    Parameters
+    ----------
+    spherical_position : np.ndarray
+        The spherical coordinates of a single node.
+    """
+    return np.array(
+        [
+            spherical_position[0] / (1 - spherical_position[2]),
+            spherical_position[1] / (1 - spherical_position[2]),
+        ]
     )
-    plotting.plot_planar_from_nodes_and_edges(
-        connected_graph.nodes, connected_graph.edges
-    )
-    for face in connected_graph.generate_faces():
-        print([node.index for node in face.boundary_nodes])
-        print(face.internal_point)
-        print(face.is_external)
