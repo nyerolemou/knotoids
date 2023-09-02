@@ -57,7 +57,7 @@ knotoids --help
 
 Output:
 
-```bash
+```console
 Usage: knotoids [OPTIONS]                                                                                                                              
                                                                                                                                                         
  Compute the knotoid distribution of a piecewise linear curve.                                                                                          
