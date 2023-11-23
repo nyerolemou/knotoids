@@ -1,3 +1,4 @@
+from collections import namedtuple
 from typing import Dict, List, NamedTuple, Optional, Tuple
 
 import numpy as np
@@ -16,8 +17,13 @@ Edge = Tuple[int, int]
 SphericalNodeDict = Dict[int, SphericalNode]
 PlanarNodeDict = Dict[int, PlanarNode]
 
+BaseRegion = namedtuple(
+    "BaseRegion",
+    ["internal_point", "boundary_nodes", "knotoid_class", "area", "is_external"],
+)
 
-class Region(NamedTuple):
+
+class Region(BaseRegion):
     """
     A region of the sphere bounded by a simple closed curve.
 
@@ -32,6 +38,17 @@ class Region(NamedTuple):
     area: float
     # second_boundary_nodes: Optional[List[SphericalNode]] = None
     is_external: bool = False
+
+    def __new__(
+        cls, internal_point, boundary_nodes, knotoid_class, area, is_external=False
+    ):
+        # Check if internal_point has unit norm
+        if not np.isclose(np.linalg.norm(internal_point), 1.0):
+            raise ValueError("internal_point must have a unit norm")
+
+        return super(Region, cls).__new__(
+            cls, internal_point, boundary_nodes, knotoid_class, area, is_external
+        )
 
 
 class Face(NamedTuple):
