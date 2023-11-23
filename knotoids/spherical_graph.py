@@ -73,7 +73,7 @@ class SphericalGraph:
         ]
         # find intersection of pair of antipodal curves
         nodes, edges = self._resolve_intersections(nodes, edges)
-        # remove all leaves
+        # remove all leaves if graph is not acyclic
         nodes, edges = self._remove_leaves(nodes, edges)
         return nodes, edges
 
@@ -99,7 +99,7 @@ class SphericalGraph:
         edges = copy.copy(edges)
         intersection_tracker = defaultdict(list)
         for first_edge, second_edge in itertools.combinations(edges, 2):
-            # TODO: why invalid value encountered in intersection?
+            # TODO: investigate why invalid value encountered in intersection?
             intersection = great_circle_arc.intersection(
                 nodes[first_edge[0]].position,
                 nodes[first_edge[1]].position,
@@ -150,7 +150,7 @@ class SphericalGraph:
         Algorithm:
             1. Find a leaf, which is a vertex with valance 1.
             2. Trim the leaf, and keep trimming along this strand until the strand is
-            deleted. Note this is because removing a leaf may create a new leaf.
+            deleted. This is because removing a leaf may create a new leaf.
             3. Continue until there are no leaves.
         """
         adjacency_matrix = _edge_list_to_adjacency_matrix(edges)
@@ -170,6 +170,8 @@ class SphericalGraph:
         """
         Delete all edges along an entire leaf strand.
         """
+        # TODO: fix case where graph is trimmed to nothing. desired behaviour is to return empty
+        # graph and classify any random point on the sphere
         neighbour = np.argwhere(adjacency_matrix[:, leaf] != 0)[0][0]
         if np.sum(adjacency_matrix[neighbour, :]) > 2:
             adjacency_matrix[leaf, neighbour] = 0
