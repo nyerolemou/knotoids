@@ -46,7 +46,7 @@ Knoto-ID is a crucial dependency for Knotoids. You can either compile it from so
 Here's a quick example to demonstrate the basic usage:
 
 ```bash
-knotoids -s path/to/curve.xyz -o send/output/here -k path/to/knoto-id
+poetry run knotoids -s path/to/curve.xyz -o send/output/here -k path/to/knoto-id
 ```
 
 See `examples/` for an example input curve and the generated outputs.
@@ -112,3 +112,5 @@ The idea for this project arose from a collaboration with Agnese Barbensi and Ol
 Thanks to Alex Thorne for constructive feedback on the code.
 
 Special thanks go to [Knoto-ID](https://github.com/sib-swiss/Knoto-ID) by Julien Dorier & Dimos Goundaroulis for handling the knotoid classification.
+
+**Note that this is still a work in progress!**
